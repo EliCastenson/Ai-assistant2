@@ -55,6 +55,10 @@ app.include_router(suggestions.router, prefix="/api/suggestions", tags=["suggest
 async def root():
     return {"message": "AI Productivity Assistant API", "status": "online"}
 
+@app.get("/health")
+async def health_check_root():
+    return {"status": "healthy", "version": "0.1.0"}
+
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "version": "0.1.0"}

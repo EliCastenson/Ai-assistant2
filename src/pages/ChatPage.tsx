@@ -11,7 +11,13 @@ import {
   CheckSquare,
   Mail,
   Sparkles,
+  RefreshCw,
+  Volume2,
+  AlertTriangle,
 } from 'lucide-react';
+import { useChat, useTasks, useUpcomingEvents, useEmails, useSuggestions } from '../hooks/useApi';
+import { useVoice } from '../hooks/useVoice';
+import { useNotifications } from '../contexts/NotificationContext';
 
 interface Message {
   id: string;
@@ -29,21 +35,93 @@ interface Suggestion {
 }
 
 const ChatPage: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      type: 'assistant',
-      content: "Hi! I'm your AI productivity assistant. I can help you manage tasks, schedule events, handle emails, and answer questions. How can I assist you today?",
-      timestamp: new Date(),
-    }
-  ]);
   const [inputValue, setInputValue] = useState('');
-  const [isListening, setIsListening] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('suggestions');
+  const [sessionId] = useState(() => `session_${Date.now()}`);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const suggestions: Suggestion[] = [
+  // API hooks
+  const { messages, loading: chatLoading, error: chatError, sendMessage } = useChat(sessionId);
+  const { tasks, loading: tasksLoading, createTask, updateTask, deleteTask } = useTasks({ status: 'todo' });
+  const { data: upcomingEvents, loading: eventsLoading } = useUpcomingEvents(5);
+  const { emails, loading: emailsLoading, syncEmails } = useEmails(5);
+  const { suggestions, loading: suggestionsLoading, acceptSuggestion, dismissSuggestion } = useSuggestions();
+
+  // Voice hook
+  const { 
+    isListening, 
+    transcript, 
+    error: voiceError, 
+    toggleListening, 
+    speak,
+    clearTranscript 
+  } = useVoice();
+  
+  // Notifications
+  const { showNotification } = useNotifications();
+
+  const handleSuggestionAccept = async (suggestion: any) => {
+    try {
+      await acceptSuggestion(suggestion.id);
+      
+      // Show success notification
+      showNotification({
+        type: 'success',
+        title: 'Suggestion Accepted',
+        message: `Successfully executed: ${suggestion.title || suggestion.type}`,
+        duration: 3000,
+      });
+
+      // Handle specific suggestion types
+      if (suggestion.type === 'task' && suggestion.data) {
+        await createTask(suggestion.data);
+        showNotification({
+          type: 'info',
+          title: 'Task Created',
+          message: `Created task: ${suggestion.data.title}`,
+          duration: 3000,
+        });
+      } else if (suggestion.type === 'calendar' && suggestion.data) {
+        // TODO: Create calendar event
+        showNotification({
+          type: 'info',
+          title: 'Event Created',
+          message: `Created event: ${suggestion.data.title}`,
+          duration: 3000,
+        });
+      }
+    } catch (error) {
+      console.error('Failed to accept suggestion:', error);
+      showNotification({
+        type: 'error',
+        title: 'Action Failed',
+        message: 'Failed to execute the suggestion. Please try again.',
+        duration: 5000,
+      });
+    }
+  };
+
+  const handleSuggestionDismiss = async (suggestion: any) => {
+    try {
+      await dismissSuggestion(suggestion.id);
+      showNotification({
+        type: 'info',
+        title: 'Suggestion Dismissed',
+        message: 'The suggestion has been removed.',
+        duration: 2000,
+      });
+    } catch (error) {
+      console.error('Failed to dismiss suggestion:', error);
+      showNotification({
+        type: 'error',
+        title: 'Error',
+        message: 'Failed to dismiss suggestion.',
+        duration: 3000,
+      });
+    }
+  };
+
+  const quickActions: Suggestion[] = [
     {
       id: '1',
       title: 'Create Task',
@@ -84,29 +162,20 @@ const ChatPage: React.FC = () => {
 
   const handleSendMessage = async (content: string) => {
     if (!content.trim()) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      type: 'user',
-      content: content,
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInputValue('');
-    setIsLoading(true);
-
-    // Simulate AI response
-    setTimeout(() => {
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        type: 'assistant',
-        content: `I understand you want to: "${content}". I'm working on that for you. This is a demo response - in the full version, I would process your request using the backend API and provide actionable results.`,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, assistantMessage]);
-      setIsLoading(false);
-    }, 1500);
+    
+    try {
+      setInputValue('');
+      clearTranscript();
+      await sendMessage(content);
+    } catch (error) {
+      console.error('Failed to send message:', error);
+      showNotification({
+        type: 'error',
+        title: 'Message Failed',
+        message: 'Failed to send your message. Please try again.',
+        duration: 5000,
+      });
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -117,21 +186,22 @@ const ChatPage: React.FC = () => {
   };
 
   const toggleVoiceInput = () => {
-    if (isListening) {
-      setIsListening(false);
-      // Stop voice recognition
-    } else {
-      setIsListening(true);
-      // Start voice recognition
-      setTimeout(() => {
-        setIsListening(false);
-        setInputValue('This is a demo voice input result');
-      }, 3000);
-    }
+    toggleListening();
   };
+
+  // Update input value when transcript changes
+  useEffect(() => {
+    if (transcript && !isListening) {
+      setInputValue(transcript);
+    }
+  }, [transcript, isListening]);
 
   const handleSuggestionClick = (suggestion: Suggestion) => {
     handleSendMessage(suggestion.action);
+  };
+
+  const handleQuickActionClick = (action: Suggestion) => {
+    handleSendMessage(action.action);
   };
 
   return (
@@ -172,7 +242,20 @@ const ChatPage: React.FC = () => {
                       : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-700'
                   }`}
                 >
-                  <p className="text-sm leading-relaxed">{message.content}</p>
+                  <div className="flex items-start justify-between">
+                    <p className="text-sm leading-relaxed flex-1">{message.content}</p>
+                    {message.type === 'assistant' && (
+                      <motion.button
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => speak(message.content)}
+                        className="ml-2 p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                        title="Read aloud"
+                      >
+                        <Volume2 className="w-4 h-4" />
+                      </motion.button>
+                    )}
+                  </div>
                   <p
                     className={`text-xs mt-2 ${
                       message.type === 'user'
@@ -187,7 +270,7 @@ const ChatPage: React.FC = () => {
             ))}
           </AnimatePresence>
 
-          {isLoading && (
+          {chatLoading && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -206,6 +289,23 @@ const ChatPage: React.FC = () => {
               </div>
             </motion.div>
           )}
+
+          {chatError && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-start space-x-3"
+            >
+              <div className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center">
+                <Bot className="w-4 h-4 text-red-600 dark:text-red-400" />
+              </div>
+              <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-2xl border border-red-200 dark:border-red-800">
+                <p className="text-sm text-red-800 dark:text-red-200">
+                  Error: {chatError}
+                </p>
+              </div>
+            </motion.div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 
@@ -219,36 +319,51 @@ const ChatPage: React.FC = () => {
           <div className="flex items-end space-x-4">
             <div className="flex-1 relative">
               <textarea
-                value={inputValue}
+                value={inputValue || transcript}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Type your message or ask me anything..."
-                className="w-full p-4 pr-12 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-200"
+                placeholder={isListening ? "Listening..." : "Type your message or ask me anything..."}
+                className={`w-full p-4 pr-12 bg-gray-100 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-2xl focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent resize-none text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-200 ${
+                  isListening ? 'ring-2 ring-red-500' : ''
+                }`}
                 rows={1}
                 style={{ maxHeight: '120px' }}
               />
-              <motion.button
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                onClick={toggleVoiceInput}
-                className={`absolute right-3 top-1/2 transform -translate-y-1/2 p-2 rounded-full transition-colors duration-200 ${
-                  isListening
-                    ? 'bg-red-500 text-white'
-                    : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
-                }`}
-              >
-                {isListening ? (
-                  <MicOff className="w-4 h-4" />
-                ) : (
-                  <Mic className="w-4 h-4" />
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2 flex items-center space-x-1">
+                {voiceError && (
+                  <motion.div
+                    initial={{ scale: 0 }}
+                    animate={{ scale: 1 }}
+                    className="p-1 text-red-500"
+                    title={voiceError}
+                  >
+                    <AlertTriangle className="w-4 h-4" />
+                  </motion.div>
                 )}
-              </motion.button>
+                <motion.button
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={toggleVoiceInput}
+                  className={`p-2 rounded-full transition-colors duration-200 ${
+                    isListening
+                      ? 'bg-red-500 text-white animate-pulse'
+                      : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'
+                  }`}
+                  title={isListening ? 'Stop listening' : 'Start voice input'}
+                >
+                  {isListening ? (
+                    <MicOff className="w-4 h-4" />
+                  ) : (
+                    <Mic className="w-4 h-4" />
+                  )}
+                </motion.button>
+              </div>
             </div>
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => handleSendMessage(inputValue)}
-              disabled={!inputValue.trim() || isLoading}
+              disabled={(!inputValue.trim() && !transcript.trim()) || chatLoading}
               className="p-4 bg-primary-500 text-white rounded-2xl hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
             >
               <Send className="w-5 h-5" />
@@ -292,32 +407,98 @@ const ChatPage: React.FC = () => {
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-3"
               >
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                  Quick Actions
-                </h3>
-                {suggestions.map((suggestion) => (
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    AI Suggestions
+                  </h3>
                   <motion.button
-                    key={suggestion.id}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={() => handleSuggestionClick(suggestion)}
-                    className="w-full p-4 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors duration-200 text-left"
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => window.location.reload()}
+                    className="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
                   >
-                    <div className="flex items-start space-x-3">
-                      <div className="w-8 h-8 bg-primary-100 dark:bg-primary-900/20 rounded-lg flex items-center justify-center">
-                        <suggestion.icon className="w-4 h-4 text-primary-600 dark:text-primary-400" />
-                      </div>
-                      <div className="flex-1">
-                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                          {suggestion.title}
-                        </h4>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          {suggestion.description}
-                        </p>
-                      </div>
-                    </div>
+                    <RefreshCw className="w-4 h-4" />
                   </motion.button>
-                ))}
+                </div>
+
+                {suggestionsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
+                  </div>
+                ) : suggestions.length > 0 ? (
+                  suggestions.slice(0, 4).map((suggestion) => (
+                    <motion.div
+                      key={suggestion.id}
+                      whileHover={{ scale: 1.02 }}
+                      className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg transition-colors duration-200"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {suggestion.title}
+                          </h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {suggestion.description}
+                          </p>
+                        </div>
+                        <div className="flex space-x-1 ml-2">
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => handleSuggestionAccept(suggestion)}
+                            className="p-1 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/20 rounded"
+                            title="Accept suggestion"
+                          >
+                            <CheckSquare className="w-3 h-3" />
+                          </motion.button>
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={() => handleSuggestionDismiss(suggestion)}
+                            className="p-1 text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600 rounded"
+                            title="Dismiss suggestion"
+                          >
+                            ×
+                          </motion.button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  ))
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-500 dark:text-gray-400 text-center py-4">
+                      No AI suggestions available
+                    </p>
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                        Quick Actions
+                      </h4>
+                      {quickActions.map((action) => (
+                        <motion.button
+                          key={action.id}
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => handleQuickActionClick(action)}
+                          className="w-full p-3 bg-gray-50 dark:bg-gray-700 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors duration-200 text-left"
+                        >
+                          <div className="flex items-start space-x-3">
+                            <div className="w-6 h-6 bg-primary-100 dark:bg-primary-900/20 rounded flex items-center justify-center">
+                              <action.icon className="w-3 h-3 text-primary-600 dark:text-primary-400" />
+                            </div>
+                            <div className="flex-1">
+                              <h5 className="text-xs font-medium text-gray-900 dark:text-gray-100">
+                                {action.title}
+                              </h5>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">
+                                {action.description}
+                              </p>
+                            </div>
+                          </div>
+                        </motion.button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </motion.div>
             )}
 
@@ -329,14 +510,98 @@ const ChatPage: React.FC = () => {
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-3"
               >
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                  Recent Tasks
-                </h3>
-                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                  <CheckSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">No tasks yet</p>
-                  <p className="text-xs">Ask me to create one!</p>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    Recent Tasks
+                  </h3>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">
+                    {tasks.length} active
+                  </span>
                 </div>
+
+                {tasksLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
+                  </div>
+                ) : tasks.length > 0 ? (
+                  <div className="space-y-2">
+                    {tasks.slice(0, 5).map((task: any) => (
+                      <motion.div
+                        key={task.id}
+                        whileHover={{ scale: 1.02 }}
+                        className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                              {task.title}
+                            </h4>
+                            {task.description && (
+                              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                {task.description.length > 50 
+                                  ? `${task.description.substring(0, 50)}...`
+                                  : task.description}
+                              </p>
+                            )}
+                            <div className="flex items-center space-x-2 mt-2">
+                              <span className={`text-xs px-2 py-1 rounded-full ${
+                                task.priority === 'high' || task.priority === 'urgent'
+                                  ? 'bg-red-100 text-red-700 dark:bg-red-900/20 dark:text-red-300'
+                                  : task.priority === 'medium'
+                                  ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/20 dark:text-yellow-300'
+                                  : 'bg-green-100 text-green-700 dark:bg-green-900/20 dark:text-green-300'
+                              }`}>
+                                {task.priority}
+                              </span>
+                              {task.due_date && (
+                                <span className="text-xs text-gray-500 dark:text-gray-400">
+                                  Due: {new Date(task.due_date).toLocaleDateString()}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <motion.button
+                            whileHover={{ scale: 1.1 }}
+                            whileTap={{ scale: 0.9 }}
+                            onClick={async () => {
+                              try {
+                                await updateTask(task.id, { status: 'completed' });
+                                showNotification({
+                                  type: 'success',
+                                  title: 'Task Completed',
+                                  message: `Marked "${task.title}" as completed`,
+                                  duration: 3000,
+                                });
+                              } catch (error) {
+                                showNotification({
+                                  type: 'error',
+                                  title: 'Error',
+                                  message: 'Failed to update task status',
+                                  duration: 3000,
+                                });
+                              }
+                            }}
+                            className="p-1 text-gray-400 hover:text-green-600 dark:hover:text-green-400"
+                            title="Mark as completed"
+                          >
+                            <CheckSquare className="w-4 h-4" />
+                          </motion.button>
+                        </div>
+                      </motion.div>
+                    ))}
+                    {tasks.length > 5 && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 text-center py-2">
+                        +{tasks.length - 5} more tasks
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <CheckSquare className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No tasks yet</p>
+                    <p className="text-xs">Ask me to create one!</p>
+                  </div>
+                )}
               </motion.div>
             )}
 
@@ -351,11 +616,42 @@ const ChatPage: React.FC = () => {
                 <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
                   Upcoming Events
                 </h3>
-                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                  <Calendar className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">No events scheduled</p>
-                  <p className="text-xs">Connect your Google Calendar</p>
-                </div>
+
+                {eventsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
+                  </div>
+                ) : upcomingEvents && upcomingEvents.events && upcomingEvents.events.length > 0 ? (
+                  <div className="space-y-2">
+                    {upcomingEvents.events.slice(0, 4).map((event: any, index: number) => (
+                      <motion.div
+                        key={event.id || index}
+                        whileHover={{ scale: 1.02 }}
+                        className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                      >
+                        <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {event.title}
+                        </h4>
+                        {event.start_time && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {new Date(event.start_time).toLocaleString()}
+                          </p>
+                        )}
+                        {event.location && (
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            📍 {event.location}
+                          </p>
+                        )}
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <Calendar className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No events scheduled</p>
+                    <p className="text-xs">Connect your Google Calendar</p>
+                  </div>
+                )}
               </motion.div>
             )}
 
@@ -367,14 +663,88 @@ const ChatPage: React.FC = () => {
                 exit={{ opacity: 0, y: -20 }}
                 className="space-y-3"
               >
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">
-                  Recent Emails
-                </h3>
-                <div className="text-center py-8 text-gray-500 dark:text-gray-400">
-                  <Mail className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm">No emails loaded</p>
-                  <p className="text-xs">Connect your Gmail account</p>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+                    Recent Emails
+                  </h3>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={async () => {
+                      try {
+                        await syncEmails();
+                        showNotification({
+                          type: 'success',
+                          title: 'Emails Synced',
+                          message: 'Successfully synced with Gmail',
+                          duration: 3000,
+                        });
+                      } catch (error) {
+                        showNotification({
+                          type: 'error',
+                          title: 'Sync Failed',
+                          message: 'Failed to sync emails. Please check your connection.',
+                          duration: 5000,
+                        });
+                      }
+                    }}
+                    className="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                    title="Sync emails"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                  </motion.button>
                 </div>
+
+                {emailsLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-primary-500" />
+                  </div>
+                ) : emails.length > 0 ? (
+                  <div className="space-y-2">
+                    {emails.slice(0, 4).map((email: any) => (
+                      <motion.div
+                        key={email.id}
+                        whileHover={{ scale: 1.02 }}
+                        className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2">
+                              <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                {email.subject}
+                              </h4>
+                              {!email.is_read && (
+                                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                              )}
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              From: {email.sender_name || email.sender}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                              {email.snippet && email.snippet.length > 60 
+                                ? `${email.snippet.substring(0, 60)}...`
+                                : email.snippet}
+                            </p>
+                            <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                              {email.date ? new Date(email.date).toLocaleDateString() : 'Recent'}
+                            </p>
+                          </div>
+                          {email.is_important && (
+                            <div className="text-yellow-500">
+                              <Sparkles className="w-3 h-3" />
+                            </div>
+                          )}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    <Mail className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">No emails loaded</p>
+                    <p className="text-xs">Connect your Gmail account</p>
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>

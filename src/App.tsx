@@ -8,6 +8,7 @@ import TasksPage from './pages/TasksPage';
 import CalendarPage from './pages/CalendarPage';
 import EmailPage from './pages/EmailPage';
 import SettingsPage from './pages/SettingsPage';
+import GoogleCallbackPage from './pages/GoogleCallbackPage';
 
 function App() {
   return (
@@ -29,6 +30,7 @@ function App() {
               <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/email" element={<EmailPage />} />
               <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/auth/google/callback" element={<GoogleCallbackPage />} />
             </Routes>
           </motion.div>
         </main>

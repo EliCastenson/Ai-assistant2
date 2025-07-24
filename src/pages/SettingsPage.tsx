@@ -1,9 +1,47 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Settings, User, Bell, Shield, Palette } from 'lucide-react';
+import { Settings, User, Bell, Shield, Palette, CheckCircle, AlertCircle, ExternalLink } from 'lucide-react';
 import ThemeToggle from '../components/ThemeToggle';
+import { authApi } from '../utils/api';
 
 const SettingsPage: React.FC = () => {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [connecting, setConnecting] = useState(false);
+
+  useEffect(() => {
+    loadUserInfo();
+  }, []);
+
+  const loadUserInfo = async () => {
+    try {
+      const response = await authApi.getCurrentUser();
+      setUser(response.data);
+    } catch (error) {
+      console.error('Failed to load user info:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleConnect = async () => {
+    try {
+      setConnecting(true);
+      const { handleGoogleOAuth } = await import('../utils/api');
+      const result = await handleGoogleOAuth();
+      
+      if (result.success) {
+        // Refresh user info after successful connection
+        await loadUserInfo();
+      }
+    } catch (error) {
+      console.error('Failed to connect Google account:', error);
+      // Show error message to user
+    } finally {
+      setConnecting(false);
+    }
+  };
+
   const settingSections = [
     {
       title: 'Appearance',
@@ -22,15 +60,36 @@ const SettingsPage: React.FC = () => {
       items: [
         {
           label: 'Google Account',
-          description: 'Not connected',
-          control: (
+          description: user?.google_connected ? 'Connected' : 'Not connected',
+          control: user?.google_connected ? (
+            <div className="flex items-center space-x-2">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              <span className="text-sm text-green-600 dark:text-green-400">Connected</span>
+            </div>
+          ) : (
             <motion.button
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
-              className="px-3 py-1 text-sm bg-primary-500 text-white rounded-md hover:bg-primary-600 transition-colors duration-200"
+              onClick={handleGoogleConnect}
+              disabled={connecting}
+              className="flex items-center space-x-2 px-3 py-1 text-sm bg-primary-500 text-white rounded-md hover:bg-primary-600 disabled:opacity-50 transition-colors duration-200"
             >
-              Connect
+              {connecting ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <ExternalLink className="w-4 h-4" />
+              )}
+              <span>{connecting ? 'Connecting...' : 'Connect'}</span>
             </motion.button>
+          ),
+        },
+        {
+          label: 'User Email',
+          description: user?.email || 'Not set',
+          control: (
+            <span className="text-sm text-gray-600 dark:text-gray-400">
+              {user?.name || 'Demo User'}
+            </span>
           ),
         },
       ],

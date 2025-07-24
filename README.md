@@ -84,7 +84,22 @@ The SQLite database will be automatically created in your home directory (`~/.ai
 
 ## 🚀 Running the Application
 
-### Development Mode
+### Quick Start (Recommended)
+The easiest way to get started:
+
+```bash
+# One-command startup (handles everything)
+./scripts/start.sh
+```
+
+This script will:
+- ✅ Check all dependencies
+- 📦 Install frontend and backend dependencies automatically
+- 🔧 Set up the environment (.env file)
+- 🚀 Start both frontend and backend services
+- 📋 Show you exactly what to do next
+
+### Manual Development Mode
 Run both frontend and backend simultaneously:
 ```bash
 npm run dev:all
