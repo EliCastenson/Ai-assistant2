@@ -1,0 +1,22 @@
+#!/bin/bash
+
+# AI Productivity Assistant - Universal Launcher
+# This script works on Linux, macOS, and Windows (Git Bash/WSL)
+
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Detect OS and run appropriate launcher
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    "$PROJECT_DIR/launchers/launch.sh" "$@"
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+    if [ -d "$PROJECT_DIR/AI Productivity Assistant.app" ]; then
+        open "$PROJECT_DIR/AI Productivity Assistant.app"
+    else
+        "$PROJECT_DIR/launchers/launch.sh" "$@"
+    fi
+elif [[ "$OSTYPE" == "cygwin" ]] || [[ "$OSTYPE" == "msys" ]] || [[ "$OSTYPE" == "win32" ]]; then
+    cmd.exe /c "$PROJECT_DIR\\launchers\\AI-Productivity-Assistant.bat"
+else
+    # Fallback to the generic launcher
+    "$PROJECT_DIR/launchers/launch.sh" "$@"
+fi

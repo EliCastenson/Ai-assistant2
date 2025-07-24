@@ -1,0 +1,110 @@
+#!/bin/bash
+
+# AI Productivity Assistant - Simple Desktop Launcher
+# Double-click this file to start the application
+
+set -e
+
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+
+# Function to show notification (cross-platform)
+show_notification() {
+    local title="$1"
+    local message="$2"
+    local type="${3:-info}" # info, success, error
+    
+    if command -v notify-send >/dev/null 2>&1; then
+        # Linux - using notify-send
+        case $type in
+            "success") notify-send -i "dialog-information" "$title" "$message" ;;
+            "error") notify-send -i "dialog-error" "$title" "$message" ;;
+            *) notify-send -i "dialog-information" "$title" "$message" ;;
+        esac
+    else
+        # Fallback - terminal output
+        echo -e "${BLUE}[$title]${NC} $message"
+    fi
+}
+
+# Function to check if running in terminal
+is_terminal() {
+    [ -t 1 ]
+}
+
+# Function to wait for user input if in terminal
+wait_for_user() {
+    if is_terminal; then
+        echo ""
+        echo "Press Enter to continue or Ctrl+C to exit..."
+        read -r
+    else
+        sleep 3
+    fi
+}
+
+# Main launcher function
+main() {
+    # Change to script directory
+    cd "$SCRIPT_DIR"
+    
+    # Show startup message
+    if is_terminal; then
+        echo -e "${PURPLE}
+╔══════════════════════════════════════════════════════════════╗
+║              🧠 AI Productivity Assistant                   ║
+║                   Starting Application...                   ║
+╚══════════════════════════════════════════════════════════════╝${NC}"
+    fi
+    
+    show_notification "AI Assistant" "Starting AI Productivity Assistant..." "info"
+    
+    # Check if we're in the right directory
+    if [ ! -f "package.json" ] || [ ! -f "backend/main.py" ]; then
+        echo -e "${RED}[ERROR]${NC} Please run this script from the project root directory"
+        show_notification "AI Assistant" "Error: Project files not found" "error"
+        wait_for_user
+        exit 1
+    fi
+    
+    # Check if universal launcher exists
+    if [ -f "./start-ai-assistant" ]; then
+        echo -e "${GREEN}[INFO]${NC} Using universal launcher..."
+        ./start-ai-assistant
+    elif [ -f "./launchers/launch.sh" ]; then
+        echo -e "${GREEN}[INFO]${NC} Using Linux launcher..."
+        ./launchers/launch.sh
+    else
+        echo -e "${RED}[ERROR]${NC} No launcher found. Please run setup-desktop-launcher.sh first."
+        show_notification "AI Assistant" "Error: Launcher not found" "error"
+        wait_for_user
+        exit 1
+    fi
+}
+
+# Handle command line arguments
+case "${1:-}" in
+    "--help"|"-h")
+        echo "AI Productivity Assistant - Desktop Launcher"
+        echo ""
+        echo "This script starts the AI Productivity Assistant application."
+        echo ""
+        echo "Usage:"
+        echo "  $0        Start the application"
+        echo "  $0 --help Show this help message"
+        echo ""
+        echo "You can double-click this file to start the application."
+        ;;
+    *)
+        main "$@"
+        ;;
+esac

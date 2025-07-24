@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AI Productivity Assistant
+Comment=Local-first AI assistant for productivity management
+GenericName=AI Assistant
+Icon=%PROJECT_DIR%/assets/icon.png
+Exec=%PROJECT_DIR%/launchers/launch.sh
+Terminal=false
+StartupNotify=true
+Categories=Office;Productivity;
+Keywords=AI;Assistant;Productivity;Tasks;Calendar;Email;
+MimeType=
+StartupWMClass=ai-productivity-assistant

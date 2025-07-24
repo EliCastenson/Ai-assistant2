@@ -1,0 +1,26 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=AI Productivity Assistant
+Comment=Local-first AI assistant for productivity management with Google Calendar, Gmail, and task management
+GenericName=AI Assistant
+Icon=/workspace/assets/icon.png
+Exec=/workspace/AI-Productivity-Assistant
+Path=/workspace
+Terminal=false
+StartupNotify=true
+Categories=Office;Productivity;Development;
+Keywords=AI;Assistant;Productivity;Tasks;Calendar;Email;Chat;Voice;
+MimeType=
+StartupWMClass=ai-productivity-assistant
+Actions=Terminal;Stop;
+
+[Desktop Action Terminal]
+Name=Start in Terminal
+Exec=gnome-terminal --working-directory=/workspace -e "/workspace/AI-Productivity-Assistant"
+Icon=/workspace/assets/icon.png
+
+[Desktop Action Stop]
+Name=Stop Application
+Exec=/workspace/scripts/stop.sh
+Icon=/workspace/assets/icon.png
