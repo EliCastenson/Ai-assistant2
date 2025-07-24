@@ -1,0 +1,19 @@
+[package]
+name = "ai-productivity-assistant"
+version = "0.1.0"
+description = "AI Productivity Assistant"
+authors = ["you"]
+license = ""
+repository = ""
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "1.5.0", features = [] }
+
+[dependencies]
+tauri = { version = "1.5.0", features = [ "api-all" ] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[features]
+custom-protocol = ["tauri/custom-protocol"]
